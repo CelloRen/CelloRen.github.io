@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Test</title>
+	<meta charset="UTF-8">
+	<style type="text/css">
+		.ss-scroll-wrapper{
+			border:dashed 1px #0e0;
+			margin: 100px auto;
+		}
+	</style>
+	<script type="text/javascript" src="js/jquery.js"></script>
+</head>
+<body>
+	<div id="test" style="width:300px;">
+		<script type="text/javascript">
+			var test=$('#test');
+			for (var i = 0; i < 100; i++) {
+				test.append(i+'<br/>');
+			};
+		</script>
+	</div>
+
+	<script type="text/javascript">
+	(function(){
+		function SSScroll(id,configs){
+			this.id=id;
+			this.configs={
+				"type":				"float",	//float, embedded, expand
+				"show":				"always",	//always, mousein
+				"size":				"10px",
+				"wrapperWidth":		"300px",		//fixedvalue, content, parent
+				"wrapperSize":	"300px",		//fixedValue, content, parent
+				"opacity":			0.3
+			};
+			$.extend(this.configs, configs);
+			
+			this.refresh(this.configs);
+		}
+
+		SSScroll.prototype.refresh=function(configs){
+			var settings=configs? $.extend({},this.configs,configs):this.configs;
+			var content=$('#'+this.id).wrap('<div id="ssScrollWrapper_'+this.id+'" class="ss-scroll-wrapper"></div>');
+			var position=content.css('position');
+			
+			if(position=='static' || position=='inherit'){
+				position='relative';
+			}
+			content.css({
+				"top": "0px",
+				"left": "0px",
+				"position":position
+			});
+
+			var wrapper=$('#ssScrollWrapper_'+this.id).css('position',position);
+
+			var w=settings['wrapperWidth'],h=settings['wrapperSize'];
+			if(settings['wrapperWidth']=='content'){
+				w=content.width()+'px';
+			}else if(settings['wrapperWidth']=='parent'){
+				w=wrapper.width()+'px';
+			}
+			if(settings['wrapperSize']=='content'){
+				h=content.height()+'px';
+			}else if(settings['wrapperSize']=='parent'){
+				h=wrapper.parent().height()+'px';
+			}
+			wrapper.css({
+				"width":	w,
+				"height":	h,
+				"overflow":	"hidden"
+			});
+
+			var scrollbar=$('<div class="ss-scroll-bar"></div>');
+			var thumb=$('<div class="ss-scroll-thumb"></div>');
+
+			var cw=content.width(),
+				ww=wrapper.width(),
+				ch=content.height(),
+				wh=wrapper.height();
+
+			if(cw>ww){	//need X scrollbar
+				var x=scrollbar.clone(false).css({
+					"width":"100%",
+					"height":settings["size"],
+					"position": "absolute",
+					"bottom":"0px",
+					"left":"0px",
+					"background-color": "#aaa",
+					"border-radius": parseInt(settings["size"])/2+"px",
+					"box-shadow": "inset 0 0 "+parseInt(settings["size"])/2+"px #333",
+					"opacity": settings["opacity"],
+					"cursor":"default"
+				}).appendTo(wrapper);
+
+				thumb.clone(false).css({
+					"width":ww*ww/cw+"px",
+					"height":settings["size"],
+					"background-color": "#333",
+					"border-radius":parseInt(settings["size"])/2+"px",
+					"position": "relative",
+					"top": "0px",
+					"left":"0px",
+					"opacity": settings["opacity"]
+				}).appendTo(x);
+			}
+
+			if(ch>wh){	//need Y scrollbar
+				var y=scrollbar.clone(false).css({
+					"width":settings["size"],
+					"height":"100%",
+					"position": "absolute",
+					"top":"0px",
+					"right":"0px",
+					"background-color": "#aaa",
+					"border-radius": parseInt(settings["size"])/2+"px",
+					"box-shadow": "inset 0 0 "+parseInt(settings["size"])/2+"px #333",
+					"opacity": settings["opacity"],
+					"cursor":"default"
+				}).appendTo(wrapper);
+
+				var yThumb=thumb.clone(false).css({
+					"width":settings["size"],
+					"height":wh*wh/ch+"px",
+					"background-color": "#333",
+					"border-radius": parseInt(settings["size"])/2+"px",
+					"position": "relative",
+					"top": "0px",
+					"left":"0px",
+					"opacity": settings["opacity"]
+				}).appendTo(y);
+
+				yThumb.unbind('mousedown',down);
+				var id=this.id;
+				yThumb.bind('mousedown',{"id":id,"wrapper":wrapper},down);
+
+				wrapper.unbind('mousewheel',wheel);
+				wrapper.bind('mousewheel',{
+						"contentObj":content,
+						"contentSize":content.height(),
+						"contentPos":parseInt(content.css('top')),
+						"thumbObj":yThumb,
+						"thumbSize":yThumb.height(),
+						"currentPos":0,
+						"direction":"top",
+						"wrapperSize":wrapper.height()
+					}, wheel);
+
+				wrapper.unbind('DOMMouseScroll',wheel);
+				wrapper.bind('DOMMouseScroll',{
+						"contentObj":content,
+						"contentSize":content.height(),
+						"contentPos":parseInt(content.css('top')),
+						"thumbObj":yThumb,
+						"thumbSize":yThumb.height(),
+						"currentPos":0,
+						"direction":"top",
+						"wrapperSize":wrapper.height()
+					}, wheel);
+
+				wrapper.unbind('click',jump);
+				wrapper.bind('click',{
+						"contentObj":content,
+						"contentSize":content.height(),
+						"thumbObj":yThumb,
+						"direction":"top",
+						"wrapper":wrapper,
+						"wrapperSize":wrapper.height()
+					},jump);
+			}
+		};
+
+
+		data={
+			"contentObj":null,
+			"contentSize":0,
+			"contentPos":0,
+			"thumbObj":null,
+			"thumbSize":0,
+			"currentPos":0,
+			"direction":"",
+			"wrapperSize":0
+		};
+
+		function clearData(){
+			data={
+				"contentObj":null,
+				"contentSize":0,
+				"contentPos":0,
+				"thumbObj":null,
+				"thumbSize":0,
+				"currentPos":0,
+				"direction":"",
+				"wrapperSize":0
+			};
+		}
+
+		function throttle(method,delay){
+			var timer=null;
+			return function(){
+				clearTimeout(timer);
+				var args=arguments, context=this;
+				timer=setTimeout(function(){
+					method.apply(context,args);
+				},delay);
+			}
+		}
+
+		function rePos(diff,mouPos){
+			var thumbPos=parseInt(data.thumbObj.css(data.direction))+diff;
+			var contentPos=data.contentPos-diff*data.contentSize/data.wrapperSize;
+			if(thumbPos>=0 && contentPos>=data.wrapperSize-data.contentSize){
+				data.thumbObj.css(data.direction,thumbPos+'px');
+				data.currentPos=mouPos;
+				data.contentObj.css(data.direction,contentPos+'px');	
+				data.contentPos=contentPos;
+			}
+		}
+
+		function down(event){
+			var contentObj=$('#'+event.data.id);
+			data={
+				"contentObj":contentObj,
+				"contentSize":contentObj.height(),
+				"contentPos":parseInt(contentObj.css('top')),
+				"thumbObj":$(this),
+				"thumbSize":$(this).height(),
+				"currentPos":event.clientY,
+				"direction":"top",
+				"wrapperSize":event.data.wrapper.height()
+			};
+
+			document.body.onselectstart = function () { return false; };
+			contentObj.css('user-select', 'none');
+
+			$(document).bind('mousemove',move);
+			$(document).bind('mouseup',up);
+		}
+
+		function move(event){
+			var mouPos=data.direction=='top'? event.clientY:event.clientX;
+			var diff=mouPos-data.currentPos;
+			rePos(diff,mouPos);
+		}
+
+		function wheel(event){
+			var oEvent=event.originalEvent;
+			var diff=oEvent.wheelDelta? -oEvent.wheelDelta/120:oEvent.detail/3;
+			data={
+				"contentObj":event.data.contentObj,
+				"contentSize":event.data.contentSize,
+				"contentPos":parseInt(event.data.contentObj.css('top')),
+				"thumbObj":event.data.thumbObj,
+				"thumbSize":event.data.thumbSize,
+				"currentPos":0,
+				"direction":event.data.direction,
+				"wrapperSize":event.data.wrapperSize
+			};
+			rePos(diff,0);
+			throttle(clearData,1000);
+		}
+
+		function up(){
+			document.body.onselectstart = null;
+			$(document).css('user-select', '');
+			$(document).unbind('mousemove',move);
+			$(document).unbind('mouseup',up);
+		}
+
+		function jump(event){
+			var data=event.data;
+			var mouPos=(data.direction=='top'? event.clientY:event.clientX)-data.wrapper[0].getBoundingClientRect()[data.direction];
+			var thumbPos=parseInt(data.thumbObj.css(data.direction));
+			var contentPos=parseInt(data.contentObj.css(data.direction));
+
+			var diff=mouPos-thumbPos;
+			var contentDiff=diff*data.contentSize/data.wrapperSize;
+
+			if(contentPos-contentDiff<data.wrapperSize-data.contentSize){
+				diff=data.wrapperSize-thumbPos-data.thumbObj.height();
+			}
+
+			contentDiff=diff*data.contentSize/data.wrapperSize;
+
+			if(data.direction=='top'){
+				data.thumbObj.animate({"top":thumbPos+diff+"px"}, 300);
+
+				data.contentObj.animate({"top":contentPos-contentDiff+"px"}, 300)
+			}else{
+				data.thumbObj.animate({"left":thumbPos+diff+"px"}, 300);
+
+				data.contentObj.animate({"left":contentPos-contentDiff+"px"}, 300)
+			}
+		}
+
+		window.SSScroll=SSScroll;
+	})();
+	</script>
+
+	<script type="text/javascript">
+		new SSScroll('test',{
+			"wrapperWidth":"300px",
+			"wrapperSize":"200px",
+			"opacity":0.6
+		});
+	</script>
+</body>
+</html>
